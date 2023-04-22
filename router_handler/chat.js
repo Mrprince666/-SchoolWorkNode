@@ -33,7 +33,7 @@ exports.getOtherUserInfo = (req, res) => {
 // 获取岗位信息
 exports.getPositionInfo = (req, res) => {
   const { positionId } = req.query;
-  const sql = 'select a.name, a.salaryLow, a.salaryUp, b.city from position a left join position_address b on a.id = b.positionId where a.id = ?';
+  const sql = 'select a.name, a.salaryLow, a.salaryUp, b.city from position_details a left join position_address b on a.id = b.positionId where a.id = ?';
   db.query(sql, positionId, (err, results) => {
     if (err) {
       return res.cc(err);

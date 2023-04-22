@@ -8,4 +8,14 @@ const db = mysql.createPool({
   // multipleStatements: true,
 });
 
+db.async = []
+
+db.async.all = (sql, params) => {
+  return new Promise((resolve, reject) => {
+    db.query(sql, params, (err, rows) => {
+      resolve({ err, rows })
+    })
+  })
+}
+
 module.exports = db;

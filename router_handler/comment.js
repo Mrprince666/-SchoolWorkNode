@@ -1,23 +1,47 @@
 const db = require('../db/index');
+const fs = require('fs');
 
 // 添加评论
 exports.addCommnet = (req, res) => {
-  const comment = req.body;
-  const sql = 'insert into comment(userId, time, title, content) values(?,?,?,?)'
-  db.query(sql, [comment.userId, comment.time, comment.title, comment.content], (err, results) => {
-    if (err) {
-      return res.cc(err);
-    };
-    if (results.affectedRows !== 1) {
-      return res.cc('发表失败');
-    }
-    return res.cc('发表成功', 0);
-  })
+  const { userId, time, title, content, moduleId, companyId, imgData } = req.body;
+  const sql = 'insert into comment(userId, time, title, content, moduleId, companyId, pic) values(?,?,?,?,?,?,?)'
+  if (imgData) {
+    const base64Data = imgData.replace(/^data:image\/\w+;base64,/, "");
+    const dataBuffer = new Buffer.from(base64Data, 'base64');
+    const saveUrl = "./public/images/" + (new Date()).getTime() + ".png";
+    fs.writeFile(saveUrl, dataBuffer, async (err) => {
+      if (err) {
+        return res.cc(err);
+      } else {
+        const url = 'http://localhost:3007' + saveUrl.slice(8);
+        const { err: err2, rows } = await db.async.all(sql, [userId, time, title, content, moduleId, companyId, url]);
+        if (err2) {
+          return res.cc(err2);
+        };
+        if (rows.affectedRows !== 1) {
+          return res.cc("添加失败");
+        }
+
+        res.cc('添加成功', 0);
+      }
+    })
+  }
+  else {
+    db.query(sql, [userId, time, title, content, moduleId, companyId, null], (err, results) => {
+      if (err) {
+        return res.cc(err);
+      };
+      if (results.affectedRows !== 1) {
+        return res.cc('发表失败');
+      }
+      return res.cc('发表成功', 0);
+    })
+  }
 };
 
 // 主页精选评论
 exports.selectList = (req, res) => {
-  const sql = 'select b.userName, b.pic, c.name, a.id, a.like, a.time, a.userId, a.title, a.content, a.moduleId  from comment a, user b, user_position c where a.userId = b.id and c.userId = b.id order by a.like desc limit 3';
+  const sql = 'select b.userName, b.pic, c.name, a.id, a.like, a.time, a.userId, a.title, a.content, a.moduleId, a.pic as image, d.name as pName, e.shortName from (comment a left join trade d on d.id = a.moduleId) left join company e on e.id = a.companyId, user b left join user_position c on c.userId = b.id where a.userId = b.id order by a.like desc limit 3';
   db.query(sql, (err, results) => {
     if (err) {
       return res.cc(err);
@@ -140,7 +164,7 @@ exports.deleteCollect = (req, res) => {
 // 获取单个发表文章
 exports.selectACommnet = (req, res) => {
   const { id } = req.query;
-  const sql = 'select b.userName, b.pic, c.name, a.id, a.like, a.time, a.userId, a.title, a.content, a.moduleId  from comment a, user b left join user_position c on c.userId = b.id where a.id = ? and a.userId = b.id';
+  const sql = 'select b.userName, b.pic, c.name, a.id, a.like, a.time, a.userId, a.title, a.content, a.moduleId, a.pic as image, d.name as pName, e.shortName from (comment a left join trade d on d.id = a.moduleId) left join company e on e.id = a.companyId, user b left join user_position c on c.userId = b.id where a.id = ? and a.userId = b.id';
   db.query(sql, id, (err, results) => {
     if (err) {
       return res.cc(err);
@@ -198,17 +222,83 @@ exports.deleteReply = (req, res) => {
 }
 
 // 广场评论(按时间)
-exports.getComment = (req, res) => {
-  const { type, page, pageCount } = req.query;
+exports.getComment = async (req, res) => {
+  const { type = 0, page = 1, pageCount = 5, input = '' } = req.query;
   const start = (page - 1) * pageCount;
-  const sql = `select b.userName, b.pic, c.name, a.id, a.like, a.time, a.userId, a.title, a.content, a.moduleId  from comment a, user b left join user_position c on c.userId = b.id where a.userId = b.id order by  ${type == 0 ? 'a.like' : 'a.time'}  desc limit ?, ?`;
-  db.query(sql, [start, +pageCount], (err, results) => {
+  const sql = `select b.userName, b.pic, c.name, a.id, a.like, a.time, a.userId, a.title, a.content, a.moduleId, a.pic as image, d.name as pName, e.shortName from (comment a left join trade d on d.id = a.moduleId) left join company e on e.id = a.companyId, user b left join user_position c on c.userId = b.id where a.userId = b.id and (a.title like '%${input}%' or a.content like '%${input}%' or d.name like '%${input}%' or e.fullName like '%${input}%') order by  ${type == 0 ? 'a.like' : 'a.time'}  desc limit ?, ?`;
+  const { err, rows } = await db.async.all(sql, [start, +pageCount]);
+  if (err) {
+    return res.cc(err);
+  };
+
+  const sql2 = `select count(*) as total from (comment a left join trade d on d.id = a.moduleId) left join company e on e.id = a.companyId, user b left join user_position c on c.userId = b.id where a.userId = b.id and (a.title like '%${input}%' or a.content like '%${input}%' or d.name like '%${input}%' or e.fullName like '%${input}%')`;
+  const { rows: rows2 } = await db.async.all(sql2, []);
+
+  res.send({
+    status: 0,
+    data: rows,
+    total: rows2[0].total,
+  });
+}
+
+// 删除文章
+exports.deleteComment = (req, res) => {
+  const { id } = req.body;
+  const sql = 'delete from comment where id = ?';
+  db.query(sql, id, (err, results) => {
+    if (err) {
+      return res.cc(err);
+    };
+    res.cc('删除成功！', 0);
+  });
+}
+
+exports.getACommnet = (req, res) => {
+  const { id } = req.query;
+  const sql = 'select * from comment where id = ?';
+  db.query(sql, id, (err, results) => {
     if (err) {
       return res.cc(err);
     };
     res.send({
       status: 0,
-      data: results,
+      data: results[0],
     });
   });
+}
+
+exports.updateComment = async (req, res) => {
+  const { id, title, content, moduleId, pic, companyId, imgData } = req.body;
+  const sql = 'update comment set title = ?, content = ?, moduleId = ?, pic = ?, companyId = ? where id = ?';
+  if (imgData) {
+    const base64Data = imgData.replace(/^data:image\/\w+;base64,/, "");
+    const dataBuffer = new Buffer.from(base64Data, 'base64');
+    const saveUrl = "./public/images/" + (new Date()).getTime() + ".png";
+    fs.writeFile(saveUrl, dataBuffer, async (err) => {
+      if (err) {
+        return res.cc(err);
+      } else {
+        const url = 'http://localhost:3007' + saveUrl.slice(8);
+        const { err: err2, rows } = await db.async.all(sql, [title, content, moduleId, url, companyId, id]);
+        if (err2) {
+          return res.cc(err2);
+        };
+        if (rows.affectedRows !== 1) {
+          return res.cc("修改失败");
+        }
+
+        res.cc('修改成功', 0);
+      }
+    })
+  } else {
+    const { err, rows } = await db.async.all(sql, [title, content, moduleId, pic, companyId, id]);
+    if (err) {
+      return res.cc(err);
+    };
+    if (rows.affectedRows !== 1) {
+      return res.cc("修改失败");
+    }
+
+    res.cc('修改成功', 0);
+  }
 }

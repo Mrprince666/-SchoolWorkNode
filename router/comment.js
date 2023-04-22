@@ -1,7 +1,7 @@
 const express = require('express');
 const { addCommnet, selectList, getGood, addGood, deleteGood,
   getCollect, addCollect, deleteCollect, selectACommnet, selectReply,
-  addReply, deleteReply, getComment }
+  addReply, deleteReply, getComment, deleteComment, getACommnet, updateComment }
   = require('../router_handler/comment');
 
 const router = express.Router();
@@ -26,5 +26,8 @@ router.post('/addReply', addReply);
 router.post('/deleteReply', deleteReply);
 
 router.get('/getComment', getComment);
+router.post('/deleteComment', deleteComment);
+router.get('/getACommnet', getACommnet);
+router.post('/updateComment', updateComment);
 
 module.exports = router;

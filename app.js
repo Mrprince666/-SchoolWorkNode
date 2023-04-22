@@ -41,6 +41,9 @@ app.use('/position', positionRouter);
 const chatRouter = require('./router/chat');
 app.use('/chat', chatRouter);
 
+const schoolRouter = require('./router/school');
+app.use('/school', schoolRouter);
+
 const uploadRouter = require('./router/upload');
 app.use('/upload', uploadRouter);
 
@@ -55,7 +58,10 @@ app.use((err, req, res, next) => {
   };
 
   //未知错误
-  res.cc(err)
+  res.send({
+    status: 1,
+    message: err,
+  })
 })
 
 app.listen(3007, () => {
